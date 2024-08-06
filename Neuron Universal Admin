@@ -633,7 +633,7 @@ AddCommand({
 		end
 	end,
 	Parameters = {"Name"},
-	Description = "'Its Either to be banged or to bang and ur the victim' - William Shakespeare. Sex [Name]."
+	Description = "makes u get fucked by said player. Usage: Sex [Name]. Usage: Sex off"
 })
 
 AddCommand({
@@ -675,7 +675,7 @@ AddCommand({
 		end
 	end,
 	Parameters = {"Name"},
-	Description = "'Its Either to be SixNined or to SixNine and ur not the victim' - William Shakespeare. sixnine [Name]."
+	Description = "makes u get 69 said player. Usage: 69 [Name]. Usage: 69 off"
 })
 
 AddCommand({
