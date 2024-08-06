@@ -4,4 +4,4 @@
 ### i Recommend Starting off by using the cmds command
 ### prefix = ;
 
-#discord https://discord.gg/sCz4m3PhG9
+discord : https://discord.gg/sCz4m3PhG9
