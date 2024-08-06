@@ -1,0 +1,910 @@
+
+--// Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local TweenServ = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local RS = game:GetService("RunService")
+local IsStudio = RS:IsStudio()
+local PlayerGui = LocalPlayer.PlayerGui
+
+--// UI
+local Lumina = IsStudio and PlayerGui.Lumina or game:GetObjects("rbxassetid://18633497739")[1]
+Lumina.Parent=LocalPlayer.PlayerGui
+Lumina.ResetOnSpawn = false
+local CmdBar = Lumina.CommandBarFrame
+local Notifs = Lumina.Notifications
+local CmdsUi = Lumina.CommandsUi
+local ExitBtn = CmdsUi.Frame.Frame.Exit
+local MinBtn = CmdsUi.Frame.Frame.Minimize.Minimize
+local CmdInput = CmdBar.CommandInput
+local SuggestTxt = CmdBar.SuggestionText
+
+--// Presets
+local NotificationPrefab = Lumina.NotificationPrefab
+local CmdPrefab = Lumina.CommandPrefab
+
+--// Variables
+local CON = nil
+local Sex = false
+local inc =true
+local dist = 4
+local bav = nil
+local nocliped=false	
+
+--// LocalPlayer
+local LocalPlayer = Players.LocalPlayer
+local LocalCharacter = LocalPlayer.Character
+local LocalHumanoid = LocalCharacter.Humanoid
+local LocalName = LocalPlayer.Name
+
+local fly = false
+local spd = 50
+local bg, bv, pt
+local waypoints = Instance.new("Folder", workspace)
+ReplicatedHumanoid = nil 
+
+--// Tables
+local Cmds = {}
+local Aliases = {}
+local Cons = {}
+
+--// Functions
+function GetRoot(Object)
+    
+	if Object:IsA("Player") then
+	    --warn("player ".. Object.Character:FindFirstChild("HumanoidRootPart").Name)
+	    
+		return Object.Character:FindFirstChild("HumanoidRootPart")
+	elseif Object:IsA("Model") then
+	    --warn("Character ".. Object:FindFirstChild("HumanoidRootPart").Name)
+
+		return Object:FindFirstChild("HumanoidRootPart")
+
+	end
+end
+
+
+local function findPlayer(searchString)
+	local cleanedString = searchString:match("^%s*(.-)%s*$"):lower()
+	if cleanedString == "me" then
+		return LocalPlayer
+	end 
+	for _, player in ipairs(Players:GetPlayers()) do
+		local playerNameLower = player.Name:lower()
+		local displayNameLower = player.DisplayName:lower()
+
+		if playerNameLower:find(cleanedString, 1, true) or displayNameLower:find(cleanedString, 1, true) then
+			return player
+		end
+	end
+	return nil
+end
+
+local function Tween(object, properties, duration, delay)
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.In, 0, false, delay)
+	local tween = TweenServ:Create(object, tweenInfo, properties)
+	tween:Play()
+	return tween
+end
+
+
+
+local function PlaySound(id)
+	local sound = Instance.new("Sound")
+	sound.SoundId = id
+	sound.Parent = LocalPlayer.PlayerGui
+	sound:Play()
+	sound.Ended:Connect(function()
+		sound:Destroy()
+	end)
+end
+
+
+function  NewNotification(description)
+	local notif = NotificationPrefab:Clone()
+	notif.Parent = Notifs
+	notif.Visible = true
+	notif.DescriptionLabel.Text = description
+	PlaySound("rbxassetid://6205717931")
+	Tween(notif, {Transparency = 0.1}, 0.5, 0)
+	Tween(notif.TitleLabel, {TextTransparency = 0}, 0.5, 0)
+	Tween(notif.DescriptionLabel, {TextTransparency = 0}, 0.5, 0)
+	Tween(notif.UIStroke, {Thickness = 2}, 0.5, 0)
+
+	Tween(notif, {Transparency = 1}, 0.5, 2)
+	Tween(notif.TitleLabel, {TextTransparency = 1}, 0.5, 2)
+	Tween(notif.DescriptionLabel, {TextTransparency = 1}, 0.5, 2)
+	Tween(notif.UIStroke, {Thickness = 0}, 0.5, 2)
+
+	task.delay(3,notif.Destroy,notif)
+
+end
+NewNotification("Loaded Lumina, v1")
+
+local function IsR15(Player)
+	if Player then
+		if Player.Character.Humanoid then
+			if Player.Character.Humanoid .RigType == Enum.HumanoidRigType.R15 then
+				return true
+			else
+				return nil
+			end
+
+		end
+	end
+end
+
+function AddCommand(cmdtable)
+	table.insert(Cmds, cmdtable)
+
+	if cmdtable.Aliases then
+		for _, alias in ipairs(cmdtable.Aliases) do
+			Aliases[alias:lower()] = cmdtable.Title:lower()
+		end
+	end
+
+	if cmdtable.Listed ~= false then
+		NewCmdInfo(cmdtable.Title, cmdtable.Description, unpack(cmdtable.Aliases or {}))
+	end
+
+	if cmdtable.Connection then
+		local connection = cmdtable.Connection
+		if connection.Tick then
+			local connectionObject = game:GetService("RunService").RenderStepped:Connect(connection.Tick)
+			Cons[connection.Name] = connectionObject
+		end
+	end
+end
+
+function TerminateConnection(name)
+	if Cons[name] then
+		Cons[name]:Disconnect()
+		Cons[name] = nil
+	else
+		error("No Con: " .. name)
+	end
+end
+
+function RunCmd(cmdStr)
+	local Cmdnm, argsString = cmdStr:match("^(%S+)%s*(.*)$")
+	Cmdnm = Cmdnm:lower()
+	local commandKey = Aliases[Cmdnm] or Cmdnm
+	local cmd
+
+	for _, command in ipairs(Cmds) do
+		if command.Title:lower() == commandKey then
+			cmd = command
+			break
+		end
+	end
+
+	if cmd then
+		local args = {}
+		for arg in argsString:gmatch("%S+") do
+			table.insert(args, arg)
+		end
+
+		if cmd.Function then
+			cmd.Function(table.unpack(args))
+		else
+			NewNotification("Cmd No No Wanna: " .. Cmdnm)
+		end
+	else
+		NewNotification("404 Not Found: " .. Cmdnm)
+	end
+end
+
+function NewCmdInfo(title, description, ...)
+	local commandInfo = CmdPrefab:Clone()
+
+	commandInfo.Parent = CmdsUi.ScrollingFrame
+	commandInfo.Visible = true
+
+	local aliasList = {...}
+	if #aliasList > 0 then
+		title = title .. " (" .. table.concat(aliasList, ", ") .. ")"
+	end
+
+	commandInfo.TitleLabel.Text = title or "No Title Given"
+	commandInfo.DescriptionLabel.Text = description or "No Description Given"
+end
+
+
+local function UpdSuggest(IT)
+	if IT == "" then
+		SuggestTxt.Text = ""
+		SuggestTxt.Visible = false
+		return
+	end
+
+	local searchQuery = IT:lower()
+	local exactMatch = nil
+	local aliasMatch = nil
+
+	for _, command in ipairs(Cmds) do
+		if command.Title:lower() == searchQuery then
+			exactMatch = command.Title
+			break
+		elseif command.Title:lower():find(searchQuery, 1, true) then
+			if not aliasMatch then
+				aliasMatch = command.Title
+			end
+		end
+	end
+
+	if not exactMatch then
+		for alias, cmdName in pairs(Aliases) do
+			if alias:lower() == searchQuery then
+				exactMatch = cmdName
+				break
+			elseif alias:lower():find(searchQuery, 1, true) then
+				if not aliasMatch then
+					aliasMatch = cmdName
+				end
+			end
+		end
+	end
+
+	if exactMatch then
+		SuggestTxt.Text = exactMatch
+		SuggestTxt.Visible = true
+	elseif aliasMatch then
+		SuggestTxt.Text = aliasMatch
+		SuggestTxt.Visible = true
+	else
+		SuggestTxt.Text = ""
+		SuggestTxt.Visible = false
+	end
+end
+
+
+tc=nil
+
+local function ShakeSpeare(Target)
+	local TargetChar = Target.Character
+	local THCr = GetRoot(TargetChar)
+	local LocalPlayerRoot = GetRoot(LocalPlayer.Character)
+	local LocalHumanoid = LocalPlayer.Character.Humanoid
+
+	if not (THCr and LocalPlayerRoot and LocalHumanoid) then return end
+
+	LocalHumanoid.Sit = true
+
+	if inc then
+		dist += .1
+		if dist >= 4 then
+			dist = 4
+			inc = false
+		end
+	else
+		dist -= .1
+		if dist <= 2 then
+			dist = 2
+			inc = true
+		end
+	end
+	local dist1 = dist - 1
+
+	if IsR15(Target) then
+		local np =  THCr.Position +  THCr.CFrame.LookVector * dist1 - Vector3.new(0,1,0)
+		local rx = CFrame.Angles(math.rad(-90), 0, 0)
+		local ac = CFrame.new(np, np + THCr.CFrame.LookVector)
+  
+        LocalPlayerRoot.CFrame = ac * rx
+     
+	else    
+		local np =  THCr.Position +  THCr.CFrame.LookVector * dist1 - Vector3.new(0,1,0)
+		local rx = CFrame.Angles(math.rad(-90), 0, 0)
+		local ac = CFrame.new(np, np + THCr.CFrame.LookVector)
+   
+
+        LocalPlayerRoot.CFrame = ac * rx
+
+    end
+end
+
+
+local function S6h1a2k3e4S5p6e7a8r9e(Target)
+	local TargetChar = Target.Character
+	local THCr = GetRoot(TargetChar)
+	local LocalPlayerRoot = GetRoot(LocalPlayer.Character)
+	local LocalHumanoid = LocalPlayer.Character.Humanoid
+
+	if not (THCr and LocalPlayerRoot and LocalHumanoid) then return end
+
+	LocalHumanoid.Sit = true
+
+	if inc then
+		dist = dist + 0.1
+		if dist >= 4 then
+			dist = 4
+			inc = false
+		end
+	else
+		dist = dist - 0.1
+		if dist <= 3 then
+			dist = 3
+			inc = true
+		end
+	end
+
+	if IsR15(Target) then
+		local dist1 = dist - 3
+		local np =  THCr.Position +  THCr.CFrame.LookVector * dist1 + Vector3.new(0,1,0)
+		local rx = CFrame.Angles(math.rad(180), 0, 0)
+		local ac = CFrame.new(np, np + THCr.CFrame.LookVector)
+
+        LocalPlayerRoot.CFrame = ac * rx
+
+    	else
+		local dist1 = dist - 3
+		local np =  THCr.Position +  THCr.CFrame.LookVector * dist1 + Vector3.new(0,1,0)
+		local rx = CFrame.Angles(math.rad(180), 0, 0)
+		local ac = CFrame.new(np, np + THCr.CFrame.LookVector)
+ 
+        
+        LocalPlayerRoot.CFrame = ac * rx
+
+
+	end   
+end
+
+local function ToggleNoclip(var)
+	if var == true then
+		RS:BindToRenderStep("Noclip", 1, function()
+
+			for _, object in  pairs(LocalCharacter:GetDescendants()) do
+				if object:IsA("BasePart") then
+					object.CanCollide=false
+				end
+			end
+		end)
+	else
+		RS:UnbindFromRenderStep("Noclip")
+	end	
+
+end
+
+local function Fling()
+		local LocRot = GetRoot(LocalCharacter)
+		if not bav then
+			bav = Instance.new("BodyAngularVelocity")
+			bav.Name = "bav"
+			bav.Parent = LocRot
+			bav.AngularVelocity = Vector3.new(0, 99999, 0)
+			bav.MaxTorque = Vector3.new(0, math.huge, 0)
+			bav.P = math.huge
+		end
+		if not nocliped==true then
+		ToggleNoclip(true)
+		nocliped=true
+		end
+		for i, v in next, LocalCharacter do
+			if v:IsA("BasePart") then
+				v.CanCollide = false
+				v.Massless = true
+				v.Velocity = Vector3.new(0, 0, 0)
+			end
+		end
+
+		if LocRot.bav then
+			for _, object in  pairs(LocalCharacter:GetDescendants()) do
+				if object:IsA("BasePart") then
+					object.CanCollide=false
+				end
+			end
+	
+			bav.AngularVelocity = Vector3.new(99999,99999,99999)
+			wait(.2)
+			bav.AngularVelocity = Vector3.new(0,0,0)
+			wait(.1)
+		end
+
+end
+
+local function Teleport(TargetChar)
+	local LocRot = GetRoot(LocalCharacter)
+	local trgtRot = GetRoot(TargetChar)
+	if LocRot and trgtRot then
+	    print(trgtRot.CFrame)
+		LocRot.CFrame = trgtRot.CFrame
+	end
+end
+
+function InitFlight(character)
+    local rp = character:FindFirstChild("HumanoidRootPart")
+    if not rp then return end
+
+    if not character:FindFirstChild("FlightPart") then
+        pt = Instance.new("Part")
+        pt.Name = "FlightPart"
+        pt.Size = rp.Size
+        pt.Transparency = 1
+        pt.Anchored = true
+        pt.CanCollide = false
+        pt.Parent = character
+    else
+        pt = character:FindFirstChild("FlightPart")
+    end
+
+    if not bg then
+        bg = Instance.new("BodyGyro", rp)
+        bg.P = 9e4
+    end
+
+    if not bv then
+        bv = Instance.new("BodyVelocity", rp)
+        bv.MaxForce = Vector3.new(9e4, 9e4, 9e4)
+    end
+end
+
+
+function FlightUwU()
+	print("sus")
+    local rp = LocalCharacter:FindFirstChild("HumanoidRootPart")
+
+    if not LocalCharacter or not rp then return end
+
+    if fly == true then
+		print("true")
+        RS:UnbindFromRenderStep("Flying")
+        fly = false
+
+        if bg then bg:Destroy() bg = nil end
+        if bv then bv:Destroy() bv = nil end
+        if pt then pt:Destroy() pt = nil end
+    else
+		print("false")
+
+        InitFlight(LocalCharacter)
+
+        RS:BindToRenderStep("Flying", Enum.RenderPriority.Character.Value + 1, function()
+            local direction = Vector3.new(0, 0, 0)
+            if UIS:IsKeyDown(Enum.KeyCode.W) then
+                direction += workspace.CurrentCamera.CFrame.LookVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then
+                direction -= workspace.CurrentCamera.CFrame.LookVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then
+                direction -= workspace.CurrentCamera.CFrame.RightVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then
+                direction += workspace.CurrentCamera.CFrame.RightVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then
+                direction += workspace.CurrentCamera.CFrame.UpVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then
+                direction -= workspace.CurrentCamera.CFrame.UpVector
+            end
+
+            pt.CFrame = rp.CFrame
+            rp.CFrame = pt.CFrame
+            bv.Velocity = direction * spd
+            bg.CFrame = workspace.CurrentCamera.CFrame
+        end)
+
+        fly = true
+    end
+end
+
+local function spectate(trgt)
+	local trgtHum = trgt.Humanoid
+	if trgtHum then
+		workspace.CurrentCamera.CameraSubject = trgtHum
+	end
+
+end
+
+local function setwaypoint(name)
+	local LocRot = GetRoot(LocalCharacter)
+	if not LocRot then return end
+	local wayp = Instance.new("Part",waypoints)
+	local BillboardGui = Instance.new("BillboardGui")
+	local ImageLabel = Instance.new("ImageLabel")
+	local TextLabel = Instance.new("TextLabel")
+
+	wayp.Transparency=1
+	wayp.CanCollide=false
+	wayp.Anchored=true
+	wayp.Name=name
+	wayp.Position=LocRot.Position
+
+	BillboardGui.Parent = wayp
+	BillboardGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	BillboardGui.Active = true
+	BillboardGui.AlwaysOnTop = true
+	BillboardGui.MaxDistance = 0.000
+	BillboardGui.Size = UDim2.new(0, 50, 0, 50)
+
+	ImageLabel.Parent = BillboardGui
+	ImageLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	ImageLabel.BackgroundTransparency = 1.000
+	ImageLabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	ImageLabel.BorderSizePixel = 0
+	ImageLabel.Size = UDim2.new(0, 50, 0, 50)
+	ImageLabel.Image = "http://www.roblox.com/asset/?id=17744683434"
+
+	TextLabel.Parent = BillboardGui
+	TextLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	TextLabel.BackgroundTransparency = 1.000
+	TextLabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	TextLabel.BorderSizePixel = 0
+	TextLabel.Position = UDim2.new(0, 0, -0.600000024, 0)
+	TextLabel.Size = UDim2.new(0, 50, 0, 50)
+	TextLabel.Font = Enum.Font.SourceSans
+	TextLabel.TextColor3 = Color3.fromRGB(254, 254, 254)
+	TextLabel.TextSize = 14.000
+	TextLabel.Text=name
+
+
+end
+
+local function DeleteWayPoint(Name)
+	local waypoint = waypoints:FindFirstChild(Name)
+	if waypoint then
+		waypoint:Destroy()
+	end
+end
+
+--// Commands
+
+AddCommand({
+	Title = "cmds",
+	Aliases = {},
+	Function = function()
+		Tween(CmdsUi, {Size = UDim2.new(0.3, 0, 0.4, 0)}, 0.5, 0)
+		CmdsUi.Visible = true
+	end,
+	Description = "Opens Commands."
+})
+
+AddCommand({
+	Title = "WayPoint",
+	Aliases = {"wp"},
+	Function = function(Name)
+		setwaypoint(Name)
+	end,
+	Parameters = {"Name"},
+	Description = "Creates A Waypoint at the position of the current player : Usage WayPoint [Name]"
+})
+
+AddCommand({
+	Title = "DeleteWaypoint",
+	Aliases = {"RemoveWayPoint","UnWayPoint"},
+	Function = function(Name)
+		DeleteWayPoint(Name)
+	end,
+	Parameters = {"Name"},
+	Description = "Creates A Waypoint at the position of the current player : Usage WayPoint [Name]"
+})
+
+AddCommand({
+	Title = "walkspeed",
+	Aliases = {"ws"},
+	Function = function(Int)
+		local hum = LocalPlayer.Character.Humanoid
+		hum.WalkSpeed = Int
+		NewNotification("Set Walkspeed to: " .. tostring(Int))
+	end,
+	Parameters = {"Int"},
+	Description = "WalkSpeed [Int]."
+})
+
+AddCommand({
+	Title = "sex",
+	Aliases = {},
+	Function = function(Name)
+		local low = Name:lower()
+		local Target
+
+		if low == "off" then
+			dist = 4
+			Target = nil
+			print(Target)
+		else
+			Target = findPlayer(Name)
+		end
+
+		if Target ~= nil then
+			dist = 4
+			if Sex == false then
+				RS:BindToRenderStep("ShakeSperian", 1, function()
+					ShakeSpeare(Target)
+				end)
+				Sex = true
+			else
+				RS:UnbindFromRenderStep("ShakeSperian")
+				RS:BindToRenderStep("ShakeSperian", 1, function()
+					ShakeSpeare(Target)
+				end)
+				Sex = false
+			end
+		else
+			if low == "off" then
+				RS:UnbindFromRenderStep("ShakeSperian")
+				NewNotification("Terminated : Sex")
+			else
+				NewNotification("Player Not Found : " .. Name)
+			end
+		end
+	end,
+	Parameters = {"Name"},
+	Description = "'Its Either to be banged or to bang and ur the victim' - William Shakespeare. Sex [Name]."
+})
+
+AddCommand({
+	Title = "sixnine",
+	Aliases = {"69"},
+	Function = function(Name)
+		local low = Name:lower()
+		local Target
+
+		if low == "off" then
+			dist = 4
+			Target = nil
+			print(Target)
+		else
+			Target = findPlayer(Name)
+		end
+
+		if Target ~= nil then
+			dist = 4
+			if Sex == false then
+				RS:BindToRenderStep("ShakeSperian", 1, function()
+					S6h1a2k3e4S5p6e7a8r9e(Target)
+				end)
+				Sex = true
+			else
+				RS:UnbindFromRenderStep("ShakeSperian")
+				RS:BindToRenderStep("ShakeSperian", 1, function()
+					S6h1a2k3e4S5p6e7a8r9e(Target)
+				end)
+				Sex = false
+			end
+		else
+			if low == "off" then
+				RS:UnbindFromRenderStep("ShakeSperian")
+				NewNotification("Terminated : Sex")
+			else
+				NewNotification("Player Not Found : " .. Name)
+			end
+		end
+	end,
+	Parameters = {"Name"},
+	Description = "'Its Either to be SixNined or to SixNine and ur not the victim' - William Shakespeare. sixnine [Name]."
+})
+
+AddCommand({
+	Title = "jumppower",
+	Aliases = {"jp"},
+	Function = function(Int)
+		local hum = LocalPlayer.Character.Humanoid
+		if hum.UseJumpPower == false then
+			hum.UseJumpPower = true
+			hum.JumpPower = Int
+		else
+			hum.JumpPower = Int
+		end
+		NewNotification("Set JumpPower to: " .. Int)
+	end,
+	Parameters = {"Int"},
+	Description = "jumppower [Int]."
+})
+
+AddCommand({
+	Title = "fling",
+	Aliases = {},
+	Function = function()
+		local LocRot = GetRoot(LocalCharacter)
+		for _, child in pairs(LocalCharacter:GetDescendants()) do
+			if child:IsA("BasePart") then
+				child.CustomPhysicalProperties = PhysicalProperties.new(99, 0.3, 0.5)
+			end
+		end
+		
+		if LocRot then
+			
+			RS:BindToRenderStep("TpFlingPLR", 1, function()
+				Fling()
+			end)
+		end
+	end,
+	Parameters = {"Name"},
+	Description = "Flings Anyone touching you (Only Works In Collision Enabled Games), Usage : fling"
+})
+AddCommand({
+	Title = "unfling",
+	Aliases = {},
+	Function = function()
+		local LocRot = GetRoot(LocalCharacter)
+		for _, child in pairs(LocalCharacter:GetDescendants()) do
+			if child:IsA("BasePart") then
+				child.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0)
+			end
+		end
+		RS:UnbindFromRenderStep("TpFlingPLR")
+		bav:Destroy()
+		bav = nil
+	end,
+	Parameters = {"Name"},
+	Description = "turns off Fling"
+})
+
+
+AddCommand({
+	Title = "noclip",
+	Aliases = {"clip"},
+	Function = function()
+		if nocliped == false then
+			ToggleNoclip(true)
+			nocliped=true
+		else
+			ToggleNoclip(false)
+			nocliped=false	
+		end
+	end,
+	Description = "Noclips Player"
+})
+
+if game.PlaceId==1662219031 then
+	AddCommand({
+		Title = "kill",
+		Aliases = {"tkill"},
+		Function = function(Name)
+
+			local tool = LocalCharacter:FindFirstChild("Stroller") or LocalPlayer.Backpack:FindFirstChild("Stroller")
+
+			if tool then
+				LocalHumanoid:EquipTool(tool)
+			end
+
+			ReplicatedHumanoid = LocalCharacter.Humanoid:Clone()
+			local targetplr = findPlayer(Name)
+			LocalCharacter.Humanoid:Destroy()
+			ReplicatedHumanoid.Parent=LocalCharacter
+			workspace.CurrentCamera.CameraSubject = ReplicatedHumanoid            
+			_G.cframe = GetRoot(LocalCharacter).CFrame
+
+			task.wait(0.5)
+			tool.Parent=workspace
+			GetRoot(LocalCharacter).CFrame=GetRoot(targetplr.Character).CFrame
+
+
+			task.wait(0.8)
+			RS:BindToRenderStep("Attach", 1, function()
+				GetRoot(LocalCharacter).CFrame=GetRoot(targetplr.Character).CFrame
+
+					if tool.Parent~=workspace then
+						task.wait(0.4)
+						LocalHumanoid.Health=0
+						ReplicatedHumanoid.Health=0
+
+						RS:UnbindFromRenderStep("Attach")
+					end
+			end)
+		end,
+		Parameters = {"Name"},
+		Description = "Kills Player"
+	})
+end
+
+AddCommand({
+	Title = "Teleport",
+	Aliases = {"tp","goto"},
+	Function = function(Name)
+		local Target = findPlayer(Name)
+		if Target and Target.Character then
+			Teleport(Target.Character)
+		end
+	end,
+	Parameters = {"Name"},
+	Description = "Teleports Current Player to A Specified Player, Usage : tp [Name]"
+})
+
+AddCommand({
+	Title = "fly",
+	Aliases = {"unfly"},
+	Function = function()
+		FlightUwU()
+	end,
+	Parameters = {},
+	Description = "Makes current Player Fly"
+})
+
+AddCommand({
+	Title = "spectate",
+	Aliases = {},
+	Function = function(nm)
+		if nm:lower() == "off" then
+			workspace.CurrentCamera.CameraSubject = LocalCharacter.Humanoid
+		else
+			local trgt = findPlayer(nm)
+			if trgt.Character then
+				spectate(trgt.Character)
+			end
+		end
+	end,
+	Parameters = {"nm"},
+	Description = "spectate [name]"
+})
+
+
+--// Inputs
+CmdInput.FocusLost:Connect(function()
+	local li = CmdInput.Text:lower()
+	SuggestTxt.Text = ""
+	SuggestTxt.Visible = false
+	CmdBar.CommandInput.Text = ""
+	Tween(CmdBar,{Position = UDim2.new(0.5, 0,1.1, -20)},0.5,0)
+	RunCmd(li)
+end)
+
+CmdInput.Changed:Connect(function()
+	local li = CmdInput.Text:lower()
+	UpdSuggest(li)
+	local rng = math.random(1,3)
+	Tween(CmdBar.UIStroke, {Transparency = 0.5}, 0.2, 0)
+	task.delay(0.3,function()
+		Tween(CmdBar.UIStroke, {Transparency = 0}, 0.2, 0)
+	end)
+
+end)
+
+MinBtn.MouseButton1Click:Connect(function()
+	if CmdsUi.Size ~= UDim2.new(0.3, 0,0.04, 0) then
+
+		Tween(CmdsUi, {Size = UDim2.new(0.3, 0,0.04, 0)},0.5,0)
+		CmdsUi.Frame.Frame.Minimize.Minimize.Rotation=0
+	else
+		Tween(CmdsUi, {Size = UDim2.new(0.3, 0,0.4, 0)},0.5,0)
+		CmdsUi.Frame.Frame.Minimize.Minimize.Rotation=180
+
+	end
+end)
+
+ExitBtn.MouseButton1Click:Connect(function()
+	Tween(CmdsUi, {Size = UDim2.new(0.3, 0,0, 0)},0.5,0)
+	CmdsUi.Frame.Frame.Minimize.Minimize.Rotation=180
+	task.delay(0.5,function()
+		CmdsUi.Visible=false
+	end)
+end)
+
+local function onIb(it, gp)
+	if it.UserInputType == Enum.UserInputType.Keyboard and it.KeyCode == Enum.KeyCode.Semicolon then
+		Tween(CmdBar,{Position = UDim2.new(0.5, 0,1, -20)},0.3,0)
+		task.delay(0.2,function()
+			CmdInput:CaptureFocus()
+		end)
+	end
+end
+
+UIS.InputBegan:Connect(onIb)
+LocalHumanoid.HealthChanged:Connect(function(health)
+	if ReplicatedHumanoid then
+		ReplicatedHumanoid.Health = health
+	 	if health == 0 then
+		    ReplicatedHumanoid.Health = 0
+	 	end
+	end
+	if health == 0 then
+		RS:UnbindFromRenderStep("TpFlingPLR")
+		RS:UnbindFromRenderStep("Noclip")
+		print(fly)
+		if fly == true then
+			FlightUwU()
+			fly = false
+		end
+	end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+	print(LocalPlayer)
+	LocalCharacter = character
+end)
+
+NewNotification("Press ; To Open The Cmd Bar")
