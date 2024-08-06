@@ -755,12 +755,9 @@ if game.PlaceId==1662219031 then
 		Title = "kill",
 		Aliases = {"tkill"},
 		Function = function(Name)
-
+          
 			local tool = LocalCharacter:FindFirstChild("Stroller") or LocalPlayer.Backpack:FindFirstChild("Stroller")
 
-			if tool then
-				LocalHumanoid:EquipTool(tool)
-			end
 
 			ReplicatedHumanoid = LocalCharacter.Humanoid:Clone()
 			local targetplr = findPlayer(Name)
@@ -768,24 +765,23 @@ if game.PlaceId==1662219031 then
 			ReplicatedHumanoid.Parent=LocalCharacter
 			workspace.CurrentCamera.CameraSubject = ReplicatedHumanoid            
 			_G.cframe = GetRoot(LocalCharacter).CFrame
+            RS:BindToRenderStep("DeEquip", 1, function()
+            if tool.Parent == workspace then
+                RS:BindToRenderStep("Attach", 1, function()
+                    GetRoot(LocalCharacter).CFrame=GetRoot(targetplr.Character).CFrame
+                        if tool.Parent~=workspace then
+                            task.wait(0.4)
+                            LocalHumanoid.Health=0
+                            ReplicatedHumanoid.Health=0
 
-			task.wait(0.5)
-			tool.Parent=workspace
-			GetRoot(LocalCharacter).CFrame=GetRoot(targetplr.Character).CFrame
+                            RS:UnbindFromRenderStep("Attach")
+                        end
+                end) 
+                RS:UnbindFromRenderStep("DeEquip")
 
-
-			task.wait(0.8)
-			RS:BindToRenderStep("Attach", 1, function()
-				GetRoot(LocalCharacter).CFrame=GetRoot(targetplr.Character).CFrame
-
-					if tool.Parent~=workspace then
-						task.wait(0.4)
-						LocalHumanoid.Health=0
-						ReplicatedHumanoid.Health=0
-
-						RS:UnbindFromRenderStep("Attach")
-					end
-			end)
+                end
+                
+        end) 
 		end,
 		Parameters = {"Name"},
 		Description = "Kills Player"
