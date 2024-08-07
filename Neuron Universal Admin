@@ -757,7 +757,7 @@ if game.PlaceId==1662219031 then
 		Function = function(Name)
           
 			local tool = LocalCharacter:FindFirstChild("Stroller") or LocalPlayer.Backpack:FindFirstChild("Stroller")
-
+			NewNotification("Equip And Drop Stroller Tool")
 
 			ReplicatedHumanoid = LocalCharacter.Humanoid:Clone()
 			local targetplr = findPlayer(Name)
